@@ -1,0 +1,129 @@
+#deployment for pod containing website image 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portfolio-deploy
+  namespace: portfolio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: portfolio-app
+  template:
+    metadata:
+      labels:
+        app: portfolio-app
+    spec:
+      terminationGracePeriodSeconds: 5
+      containers:
+      - name: server
+        image: purvesh0110/my_portfolio:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+
+
+---
+#service for accessing pod 
+apiVersion: v1
+kind: Service
+metadata:
+  name: portfolio-srv
+  namespace: portfolio
+spec:
+  type: NodePort
+  selector:
+    app: portfolio-app
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 80
+
+---
+#certificate request for domain 
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: portfolio-cert
+  namespace: portfolio
+spec:
+  secretName: port-tls
+  issuerRef:
+    name: portfolio-issuer
+    kind: ClusterIssuer
+  commonName: purveshwakode.cloud
+
+  dnsNames:
+  - purveshwakode.cloud
+
+---
+#nginx ingress controller for connecting to nodeport service 
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: portfolio-issuer
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  name: portfolio-ingress
+  namespace: portfolio
+spec:
+  ingressClassName: public
+  rules:
+  - host: purveshwakode.cloud
+    http:
+      paths:
+      - backend:
+          service:
+            name: portfolio-srv
+            port:
+              number: 80
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - purveshwakode.cloud
+    secretName: port-tls
+
+
+---
+#ssl certificate issuer for portfolio website
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: portfolio-issuer
+  namespace: portfolio
+spec:
+  acme:
+    # The ACME server URL
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Email address used for ACME registration
+    email: 0110purvesh@gmail.com
+    # Name of a secret used to store the ACME account private key
+    privateKeySecretRef:
+      name: secret-tls
+    # Enable the HTTP-01 challenge provider
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+
+---
+#cluster role for dashboard 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: default
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: kube-system
+
+~
+~
+~
